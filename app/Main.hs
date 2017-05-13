@@ -9,22 +9,21 @@ data LispVal = Atom String
              | DottedList [LispVal] LispVal
              | Number Integer
              | String String
-             | Character Char
-             | Float Float
-             | Bool Bool deriving (Show, Eq)
+             | Bool Bool
+
+instance Show LispVal where
+  show = showVal
 
 main :: IO ()
-main = do
-  (expr:_) <- getArgs
-  putStrLn $ readExpr expr
+main = getArgs >>= print . eval . readExpr . head
 
 symbol :: Parser Char
 symbol = oneOf "!#$%&|*+-/:<=>?@^_~"
 
-readExpr :: String -> String
+readExpr :: String -> LispVal
 readExpr input = case parse parseExpr "lisp" input of
-  Left err  -> "No match: " ++ show err
-  Right val -> "Found value "  ++ show val
+  Left err  -> String $ "No match: " ++ show err
+  Right val -> val
 
 spaces :: Parser ()
 spaces = skipMany1 space
@@ -48,15 +47,6 @@ parseAtom = do
 
 parseNumber :: Parser LispVal
 parseNumber = liftM (Number . read) $ many1 digit
-
--- parseNumber = do
---   d <- many1 digit
---   return $ Number $ read d
-
--- parseNumber = many1 digit >>= return . Number . read
-
--- parseCharacter :: Parser LispVal
--- parseCharacter = liftM (Character . read) $ many1 digit
 
 parseList :: Parser LispVal
 parseList = liftM List $ sepBy parseExpr spaces
@@ -82,4 +72,21 @@ parseExpr = parseAtom
                 x <- try parseList <|> parseDottedList
                 char ')'
                 return x
-        --  <|> parseCharacter
+
+showVal :: LispVal -> String
+showVal (String contents) = "\"" ++ contents ++ "\""
+showVal (Atom name)       = name
+showVal (Number contents) = show contents
+showVal (Bool True)       = "#t"
+showVal (Bool False)      = "#f"
+showVal (List contents)   = "(" ++ unwordsList contents ++ ")"
+showVal (DottedList h t)  = "(" ++ unwordsList h ++ " . " ++ showVal t ++ ")"
+
+unwordsList :: [LispVal] -> String
+unwordsList = unwords . map showVal
+
+eval :: LispVal -> LispVal
+eval val@(String _)             = val
+eval val@(Number _)             = val
+eval val@(Bool _)               = val
+eval (List [Atom "quote", val]) = val
